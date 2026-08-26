@@ -1,0 +1,10 @@
+__pycache__/
+*.pyc
+
+# Local chess databases and generated outputs should not be uploaded to GitHub.
+*.pgn
+*.pgi
+*.ini
+*.csv
+TWIC/
+*_player_wise_*/

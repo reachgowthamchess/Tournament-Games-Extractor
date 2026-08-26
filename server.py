@@ -341,6 +341,10 @@ def run_extraction(job_id, config):
             raise RuntimeError("Enter a valid Chess-Results tournament URL.")
         if not twic_path.exists():
             raise RuntimeError(f"TWIC PGN not found: {twic_path}")
+        if not twic_path.is_file():
+            raise RuntimeError(f"TWIC PGN path must be a .pgn file, not a folder: {twic_path}")
+        if twic_path.suffix.casefold() != ".pgn":
+            raise RuntimeError(f"TWIC PGN path must end with .pgn: {twic_path}")
 
         stem = safe_name(tournament_name)
         output_root.mkdir(parents=True, exist_ok=True)
