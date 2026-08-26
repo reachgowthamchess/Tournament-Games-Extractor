@@ -95,11 +95,19 @@ form.addEventListener("submit", async (event) => {
   };
 
   runButton.disabled = true;
-  const response = await fetch("/api/jobs", {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(payload),
-  });
+  let response;
+  try {
+    response = await fetch("/api/jobs", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload),
+    });
+  } catch (error) {
+    setStatus("Failed", "failed");
+    setLogs(["Could not connect to the local Python server. Restart it with: py server.py"]);
+    runButton.disabled = false;
+    return;
+  }
 
   if (!response.ok) {
     const error = await response.json();

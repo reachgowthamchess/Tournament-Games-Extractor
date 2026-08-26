@@ -659,6 +659,22 @@ class Handler(SimpleHTTPRequestHandler):
                 }
             )
             return
+        if self.path == "/api/jobs":
+            with JOBS_LOCK:
+                jobs = [
+                    {
+                        "id": job["id"],
+                        "status": job["status"],
+                        "phase": job["phase"],
+                        "games": job.get("games", 0),
+                        "progress": job.get("progress"),
+                        "created_at": job.get("created_at"),
+                        "updated_at": job.get("updated_at"),
+                    }
+                    for job in JOBS.values()
+                ]
+            self.send_json({"jobs": jobs})
+            return
         if self.path.startswith("/api/jobs/"):
             job_id = self.path.rsplit("/", 1)[-1]
             with JOBS_LOCK:
