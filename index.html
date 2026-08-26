@@ -1,0 +1,106 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Tournament Opponent Games Extractor</title>
+    <link rel="stylesheet" href="styles.css" />
+  </head>
+  <body>
+    <main class="shell">
+      <section class="workspace">
+        <header class="topbar">
+          <div>
+            <p class="eyebrow">PGN workflow</p>
+            <h1>Tournament Opponent Games Extractor</h1>
+          </div>
+          <div class="status-pill" id="statusPill">Idle</div>
+        </header>
+
+        <form id="extractForm" class="tool-surface">
+          <div class="field-grid">
+            <label>
+              <span>Tournament name</span>
+              <input id="tournamentName" name="tournamentName" autocomplete="off" required
+                placeholder="39th NATIONAL UNDER-13 OPEN CHESS CHAMPIONSHIP 2026" />
+            </label>
+
+            <label>
+              <span>Chess-Results link</span>
+              <input id="tournamentUrl" name="tournamentUrl" type="url" required
+                placeholder="https://s1.chess-results.com/tnr1479391.aspx?lan=1&art=0..." />
+            </label>
+
+            <label>
+              <span>TWIC PGN path</span>
+              <input id="twicPath" name="twicPath" required />
+            </label>
+
+            <label>
+              <span>Output folder</span>
+              <input id="outputDir" name="outputDir" required />
+            </label>
+
+            <label>
+              <span>Opponent rename</span>
+              <input id="placeholder" name="placeholder" required />
+            </label>
+          </div>
+
+          <div class="actions">
+            <button id="runButton" type="submit">
+              <span class="button-icon">▶</span>
+              <span>Run extraction</span>
+            </button>
+            <button id="resetButton" type="button" class="secondary">
+              <span class="button-icon">↺</span>
+              <span>Reset</span>
+            </button>
+          </div>
+        </form>
+
+        <section class="metrics" aria-live="polite">
+          <div>
+            <span>Phase</span>
+            <strong id="phaseValue">Not started</strong>
+          </div>
+          <div>
+            <span>Players</span>
+            <strong id="progressValue">-</strong>
+          </div>
+          <div>
+            <span>Games</span>
+            <strong id="gamesValue">0</strong>
+          </div>
+        </section>
+
+        <section id="resultPanel" class="result-panel" hidden>
+          <h2>Output</h2>
+          <dl>
+            <div>
+              <dt>Final PGN</dt>
+              <dd id="finalPgn"></dd>
+            </div>
+            <div>
+              <dt>Summary CSV</dt>
+              <dd id="summaryCsv"></dd>
+            </div>
+            <div>
+              <dt>Per-player PGNs</dt>
+              <dd id="playerDir"></dd>
+            </div>
+          </dl>
+        </section>
+
+        <section class="log-panel">
+          <div class="panel-title">
+            <h2>Run Log</h2>
+            <span id="logCount">0 lines</span>
+          </div>
+          <pre id="logOutput">Waiting for a tournament...</pre>
+        </section>
+      </section>
+    </main>
+    <script src="app.js"></script>
+  </body>
+</html>
