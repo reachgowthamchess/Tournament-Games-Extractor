@@ -6,8 +6,7 @@ Local web app for extracting opponent games for a Chess-Results tournament.
 
 - Reads the tournament starting-rank list from a Chess-Results link.
 - Uses each listed player's FIDE ID to download games from Chess-Results game search.
-- Downloads TWIC weekly PGN zip files from the selected date range.
-- Merges both sources into one deduplicated PGN.
+- Merges Chess-Results games into one deduplicated PGN.
 - Renames non-listed opponents to `Hatsun` by default.
 - Creates a summary CSV and per-player color PGN files.
 
@@ -28,8 +27,6 @@ http://127.0.0.1:8765
 
 - Tournament name
 - Chess-Results tournament link
-- TWIC start date
-- TWIC end date
 - Output folder
 - Opponent rename text
 
@@ -44,12 +41,11 @@ C:\Users\GOWTHAM\Downloads\Tournament opponent games extraction
 For a tournament named `Example Tournament`, the app creates:
 
 ```text
-Example Tournament_TWIC_and_ChessResults_Hatsun.pgn
-Example Tournament_TWIC_and_ChessResults_Hatsun_summary.csv
 Example Tournament_ChessResults_only_Hatsun.pgn
-Example Tournament_player_wise_TWIC_and_ChessResults_Hatsun\
+Example Tournament_ChessResults_only_Hatsun_summary.csv
+Example Tournament_player_wise_ChessResults_only_Hatsun\
 ```
 
 ## Notes
 
-This app still needs the Python backend because browsers cannot reliably submit Chess-Results PGN download forms directly. TWIC files are downloaded automatically from the public TWIC archive.
+This app still needs the Python backend because browsers cannot reliably submit Chess-Results PGN download forms directly.

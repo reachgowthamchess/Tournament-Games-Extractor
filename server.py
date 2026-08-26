@@ -1,16 +1,11 @@
 import csv
 import hashlib
-import io
 import json
 import re
-import subprocess
-import tempfile
 import threading
 import time
 import uuid
-import zipfile
 from collections import defaultdict
-from datetime import date, datetime
 from html.parser import HTMLParser
 from http.cookiejar import CookieJar
 from http.server import SimpleHTTPRequestHandler, ThreadingHTTPServer
@@ -20,10 +15,9 @@ from urllib.request import HTTPCookieProcessor, Request, build_opener, urlopen
 
 
 APP_DIR = Path(__file__).resolve().parent
-STATIC_DIR = APP_DIR / "static"
+STATIC_DIR = APP_DIR / "static" if (APP_DIR / "static" / "index.html").exists() else APP_DIR
 DEFAULT_OUTPUT_DIR = Path(r"C:\Users\GOWTHAM\Downloads\Tournament opponent games extraction")
 GAME_SEARCH_URL = "https://s1.chess-results.com/PartieSuche.aspx?lan=1&SNode=S0"
-TWIC_ARCHIVE_URL = "https://theweekinchess.com/twic"
 MAX_LINES_VALUE = "5"
 
 TAG_RE = re.compile(rb'^\[([A-Za-z0-9_]+)\s+"(.*)"\]\s*$')
@@ -158,68 +152,7 @@ class SearchFormParser(HTMLParser):
             self.select_name = None
 
 
-class TwicArchiveParser(HTMLParser):
-    def __init__(self):
-        super().__init__()
-        self.in_row = False
-        self.in_cell = False
-        self.current_cell = []
-        self.current_row = []
-        self.rows = []
-        self.cell_link = None
-
-    def handle_starttag(self, tag, attrs):
-        attrs = dict(attrs)
-        if tag == "tr":
-            self.in_row = True
-            self.current_row = []
-        elif tag in {"td", "th"} and self.in_row:
-            self.in_cell = True
-            self.current_cell = []
-            self.cell_link = None
-        elif tag == "a" and self.in_cell:
-            self.cell_link = attrs.get("href")
-
-    def handle_endtag(self, tag):
-        if tag == "tr" and self.in_row:
-            if self.current_row:
-                self.rows.append(self.current_row)
-            self.in_row = False
-        elif tag in {"td", "th"} and self.in_cell:
-            text = clean_spaces(" ".join(self.current_cell))
-            self.current_row.append({"text": text, "href": self.cell_link})
-            self.in_cell = False
-            self.cell_link = None
-
-    def handle_data(self, data):
-        if self.in_cell:
-            text = clean_spaces(data)
-            if text:
-                self.current_cell.append(text)
-
-
 def fetch_bytes(url):
-    if url.startswith("https://theweekinchess.com/"):
-        if url.lower().endswith(".zip"):
-            with tempfile.NamedTemporaryFile(delete=False, suffix=".zip") as tmp:
-                tmp_path = Path(tmp.name)
-            try:
-                script = (
-                    "$ProgressPreference='SilentlyContinue'; "
-                    f"Invoke-WebRequest -Uri '{url}' -UseBasicParsing -OutFile '{tmp_path}'"
-                )
-                subprocess.run(["powershell", "-NoProfile", "-Command", script], check=True, capture_output=True)
-                return tmp_path.read_bytes()
-            finally:
-                if tmp_path.exists():
-                    tmp_path.unlink()
-        script = (
-            "$ProgressPreference='SilentlyContinue'; "
-            f"(Invoke-WebRequest -Uri '{url}' -UseBasicParsing).Content"
-        )
-        completed = subprocess.run(["powershell", "-NoProfile", "-Command", script], check=True, capture_output=True)
-        return completed.stdout
-
     request = Request(
         url,
         headers={
@@ -233,41 +166,6 @@ def fetch_bytes(url):
 
 def fetch_text(url):
     return fetch_bytes(url).decode("utf-8", errors="replace")
-
-
-def parse_date(value):
-    return datetime.strptime(value, "%Y-%m-%d").date()
-
-
-def load_twic_issues(start_date, end_date):
-    parser = TwicArchiveParser()
-    parser.feed(fetch_text(TWIC_ARCHIVE_URL))
-    issues = []
-    for row in parser.rows:
-        if len(row) < 4:
-            continue
-        issue = row[0]["text"]
-        issue_date = row[1]["text"]
-        pgn_cell = row[3]
-        if not issue.isdigit() or not re.match(r"\d{4}-\d{2}-\d{2}$", issue_date):
-            continue
-        if pgn_cell["text"].upper() != "PGN" or not pgn_cell["href"]:
-            continue
-        dt = parse_date(issue_date)
-        if start_date <= dt <= end_date:
-            href = pgn_cell["href"]
-            if href.startswith("/"):
-                href = "https://theweekinchess.com" + href
-            issues.append({"issue": issue, "date": issue_date, "url": href})
-    return issues
-
-
-def iter_twic_zip_games(zip_bytes):
-    with zipfile.ZipFile(io.BytesIO(zip_bytes)) as zf:
-        for member in zf.namelist():
-            if member.lower().endswith(".pgn"):
-                with zf.open(member) as fh:
-                    yield from split_games(fh.read())
 
 
 def load_players(url):
@@ -442,8 +340,6 @@ def run_extraction(job_id, config):
     try:
         tournament_name = clean_spaces(config["tournament_name"])
         tournament_url = clean_spaces(config["tournament_url"])
-        twic_start = parse_date(config["twic_start"])
-        twic_end = parse_date(config["twic_end"])
         output_root = Path(config["output_dir"])
         placeholder = clean_spaces(config.get("placeholder") or "Hatsun")
 
@@ -452,19 +348,16 @@ def run_extraction(job_id, config):
         parsed = urlparse(tournament_url)
         if parsed.scheme not in {"http", "https"} or "chess-results.com" not in parsed.netloc:
             raise RuntimeError("Enter a valid Chess-Results tournament URL.")
-        if twic_start > twic_end:
-            raise RuntimeError("TWIC start date must be before or equal to TWIC end date.")
 
         stem = safe_name(tournament_name)
         output_root.mkdir(parents=True, exist_ok=True)
-        final_pgn = output_root / f"{stem}_TWIC_and_ChessResults_{safe_name(placeholder)}.pgn"
-        summary_csv = output_root / f"{stem}_TWIC_and_ChessResults_{safe_name(placeholder)}_summary.csv"
-        chessresults_pgn = output_root / f"{stem}_ChessResults_only_{safe_name(placeholder)}.pgn"
-        player_dir = output_root / f"{stem}_player_wise_TWIC_and_ChessResults_{safe_name(placeholder)}"
+        final_pgn = output_root / f"{stem}_ChessResults_only_{safe_name(placeholder)}.pgn"
+        summary_csv = output_root / f"{stem}_ChessResults_only_{safe_name(placeholder)}_summary.csv"
+        player_dir = output_root / f"{stem}_player_wise_ChessResults_only_{safe_name(placeholder)}"
         player_dir.mkdir(parents=True, exist_ok=True)
         for path in player_dir.glob("*.pgn"):
             path.unlink()
-        for path in (final_pgn, summary_csv, chessresults_pgn):
+        for path in (final_pgn, summary_csv):
             if path.exists():
                 path.unlink()
 
@@ -476,13 +369,13 @@ def run_extraction(job_id, config):
         add_log(job_id, f"Parsed {len(players)} players with FIDE IDs.")
 
         counts = {
-            player["name"]: {"White": 0, "Black": 0, "ChessResults": 0, "TWIC": 0, "Downloaded": 0}
+            player["name"]: {"White": 0, "Black": 0, "ChessResults": 0, "Downloaded": 0}
             for player in players
         }
         out_handles = {}
         seen_final = set()
         seen_by_bucket = defaultdict(set)
-        source_entries = {"ChessResults": 0, "TWIC": 0}
+        source_entries = {"ChessResults": 0}
 
         def get_handle(player_name, color):
             key = (player_name, color)
@@ -548,7 +441,7 @@ def run_extraction(job_id, config):
         update_job(job_id, phase="chessresults", progress={"done": 0, "total": len(players)})
 
         try:
-            with final_pgn.open("wb") as final_fh, chessresults_pgn.open("wb") as cr_fh:
+            with final_pgn.open("wb") as final_fh:
                 for index, player in enumerate(players, start=1):
                     pgn_bytes = download_player_pgn(opener, form_template, player["fide_id"])
                     downloaded = 0
@@ -556,33 +449,12 @@ def run_extraction(job_id, config):
                         headers = parse_headers(game_lines)
                         if headers.get("White") or headers.get("Black"):
                             downloaded += 1
-                            process_game(game_lines, "ChessResults", final_fh, cr_fh, player["name"])
+                            process_game(game_lines, "ChessResults", final_fh, forced_player=player["name"])
                     counts[player["name"]]["Downloaded"] = downloaded
                     if index == 1 or index % 10 == 0 or index == len(players):
                         add_log(job_id, f"Chess-Results: {index}/{len(players)} players, {len(seen_final)} unique games.")
                     update_job(job_id, progress={"done": index, "total": len(players)}, games=len(seen_final))
                     time.sleep(0.12)
-
-                update_job(job_id, phase="twic", progress={"done": 0, "total": None})
-                add_log(job_id, "Reading TWIC archive...")
-                twic_issues = load_twic_issues(twic_start, twic_end)
-                if not twic_issues:
-                    add_log(job_id, "No TWIC issues found in the selected date range.")
-                else:
-                    add_log(job_id, f"Found {len(twic_issues)} TWIC issue(s) in the selected date range.")
-                update_job(job_id, progress={"done": 0, "total": len(twic_issues)})
-                for issue_index, issue in enumerate(twic_issues, start=1):
-                    add_log(job_id, f"TWIC {issue['issue']} ({issue['date']}): downloading PGN zip...")
-                    zip_bytes = fetch_bytes(issue["url"])
-                    scanned = 0
-                    for game_lines in iter_twic_zip_games(zip_bytes):
-                        scanned += 1
-                        process_game(game_lines, "TWIC", final_fh)
-                    add_log(
-                        job_id,
-                        f"TWIC {issue['issue']}: scanned {scanned:,} games, {len(seen_final)} unique games.",
-                    )
-                    update_job(job_id, progress={"done": issue_index, "total": len(twic_issues)}, games=len(seen_final))
         finally:
             for handle in out_handles.values():
                 handle.close()
@@ -598,7 +470,6 @@ def run_extraction(job_id, config):
                     "Black Games",
                     "Total Player Entries",
                     "ChessResults Entries",
-                    "TWIC Entries",
                 ]
             )
             for player in players:
@@ -612,7 +483,6 @@ def run_extraction(job_id, config):
                         row["Black"],
                         row["White"] + row["Black"],
                         row["ChessResults"],
-                        row["TWIC"],
                     ]
                 )
 
@@ -620,7 +490,6 @@ def run_extraction(job_id, config):
             "players": len(players),
             "unique_games": len(seen_final),
             "chessresults_entries": source_entries["ChessResults"],
-            "twic_entries": source_entries["TWIC"],
             "player_files": len(out_handles),
             "final_pgn": str(final_pgn),
             "summary_csv": str(summary_csv),
@@ -640,6 +509,12 @@ class Handler(SimpleHTTPRequestHandler):
     def log_message(self, format, *args):
         return
 
+    def end_headers(self):
+        self.send_header("Cache-Control", "no-store")
+        self.send_header("Pragma", "no-cache")
+        self.send_header("Expires", "0")
+        super().end_headers()
+
     def send_json(self, payload, status=200):
         body = json.dumps(payload).encode("utf-8")
         self.send_response(status)
@@ -652,8 +527,6 @@ class Handler(SimpleHTTPRequestHandler):
         if self.path == "/api/defaults":
             self.send_json(
                 {
-                    "twic_start": "2026-01-01",
-                    "twic_end": date.today().isoformat(),
                     "output_dir": str(DEFAULT_OUTPUT_DIR),
                     "placeholder": "Hatsun",
                 }

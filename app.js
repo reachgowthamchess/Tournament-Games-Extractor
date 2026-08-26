@@ -34,8 +34,6 @@ function updateJobView(job) {
 
   if (job.progress && job.progress.total) {
     progressValue.textContent = `${job.progress.done}/${job.progress.total}`;
-  } else if (phase === "twic") {
-    progressValue.textContent = "TWIC scan";
   } else {
     progressValue.textContent = "-";
   }
@@ -73,8 +71,6 @@ async function pollJob(jobId) {
 async function loadDefaults() {
   const response = await fetch("/api/defaults");
   const defaults = await response.json();
-  document.querySelector("#twicStart").value = defaults.twic_start;
-  document.querySelector("#twicEnd").value = defaults.twic_end;
   document.querySelector("#outputDir").value = defaults.output_dir;
   document.querySelector("#placeholder").value = defaults.placeholder;
 }
@@ -88,8 +84,6 @@ form.addEventListener("submit", async (event) => {
   const payload = {
     tournament_name: document.querySelector("#tournamentName").value,
     tournament_url: document.querySelector("#tournamentUrl").value,
-    twic_start: document.querySelector("#twicStart").value,
-    twic_end: document.querySelector("#twicEnd").value,
     output_dir: document.querySelector("#outputDir").value,
     placeholder: document.querySelector("#placeholder").value,
   };
